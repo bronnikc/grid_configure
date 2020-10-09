@@ -1,0 +1,12 @@
+---
+- include_tasks: grid_configure.yml
+  vars:
+   _type_install: "CRS_CONFIG"
+  tags:  configure_grid
+- name: Clean stage directory {{stage_dir}}  
+  file:
+    path: "{{stage_dir}}"
+    state: absent
+  become: true
+  tags: clean_stage  
+    

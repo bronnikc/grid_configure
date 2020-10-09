@@ -1,0 +1,122 @@
+---
+- name: install CVU on master node {{inventory_hostname}}
+  yum:
+    name: '{{grid_home.oracle_home}}/cv/rpm/{{ cvuqdisk }}'
+    state: present
+  become: true
+  environment:
+     CVUQDISK_GRP: "oinstall"    
+  tags: configure_grid,cvu
+
+- name: Copy CVU
+  shell: |
+     scp {{grid_home.oracle_home}}/cv/rpm/{{ cvuqdisk }} {{_oracle_nodes.ip_addr}}:{{stage_dir}}
+  become: true
+  become_user: "{{grid_home.oracle_user}}"   
+  with_items: 
+    - "{{ nodes }}"
+  loop_control:
+     loop_var: _oracle_nodes
+     label: '[copy CVU on host {{_oracle_nodes.name}}'
+  when: _oracle_nodes.name != inventory_hostname
+  tags: configure_grid,cvu
+- name: install CVU
+  yum:
+    name: "{{stage_dir}}/{{cvuqdisk}}"
+    state: present
+  become: true
+  environment:
+     CVUQDISK_GRP: "oinstall"
+  delegate_to: "{{_oracle_nodes.ip_addr}}"
+  with_items: 
+    - "{{ nodes }}"
+  loop_control:
+     loop_var: _oracle_nodes
+     label: '[install CVU on host {{_oracle_nodes.name}}'
+  when: _oracle_nodes.name != inventory_hostname
+  tags: configure_grid,cvu  
+
+- name: Provision disks
+  shell: |
+      {{ grid_home.oracle_home }}/bin/asmcmd  afd_label {{ item.label }} {{ item.disk }}  --init
+      # clean files in oracle_base with root  owner
+      # error in root.sh
+      rm -rf {{ grid_home.oracle_base }}/diag/crs/{{inventory_hostname}} 
+  become: yes 
+  with_items:
+    - "{{ vote_disk }}"
+  loop_control:
+    label: '[Provision disk - {{item.disk}} with label {{item.label}}'  
+  environment:
+      ORACLE_BASE: "/tmp"
+      ORACLE_HOME: "{{ grid_home.oracle_home }}"  
+  tags: configure_grid
+
+- name: Copy rspfile
+  template: src=grid_install.rsp.j2 dest={{stage_dir}}/gridInstallSoft.rsp mode=660
+  become: true
+  become_user: "{{grid_home.oracle_user}}" 
+  tags: configure_grid 
+- name: Run gridConfigure
+  shell: 
+    cmd: "./gridSetup.sh -silent -ignorePrereqFailure -waitforcompletion  -skipPrereqs -responseFile {{stage_dir}}/gridInstallSoft.rsp > {{stage_dir}}/giconfigure.log" 
+    chdir: "{{ grid_home.oracle_home }}"  
+  register: _grid_setup_stdout
+  become: true
+  become_user: "{{grid_home.oracle_user}}"  
+  tags: configure_grid 
+- debug: var=_grid_setup_stdout          
+  tags: configure_grid 
+- name: Run orainstRoot.sh
+  shell:
+    cmd: "{{ grid_home.oracle_inventory }}/orainstRoot.sh" 
+  delegate_to: "{{ _oracle_nodes.ip_addr }}"
+  register: _orainstRoot_stdout 
+  with_items:
+    -  "{{ nodes }}"
+  loop_control:
+    loop_var: _oracle_nodes
+  when: _oracle_nodes.name != inventory_hostname
+  become: true 
+  tags: configure_grid,orainst 
+- debug: var=_orainstRoot_stdout      
+  tags: configure_grid,orainst 
+- name: Run Root.sh on master_node {{inventory_hostname}}
+  shell:
+    cmd: "{{ grid_home.oracle_home }}/root.sh > {{stage_dir}}/rootsh.log"
+  become: true 
+  register: _rootsh_stdout  
+  tags: configure_grid
+- debug: var=_rootsh_stdout
+  tags: configure_grid
+- name: Run Root.sh on others nodes
+  shell:
+    cmd: "{{ grid_home.oracle_home }}/root.sh > {{stage_dir}}/rootsh.log"
+  become: true 
+  register: _rootsh_stdout  
+  delegate_to: "{{ _oracle_nodes.ip_addr }}"
+  with_items:
+    -  "{{ nodes }}"
+  loop_control:
+    loop_var: _oracle_nodes
+    label: '[run root.sh on node {{_oracle_nodes.name}}]'
+  when: _oracle_nodes.name != inventory_hostname
+  tags: configure_grid
+- debug: var=_rootsh_stdout
+  tags: configure_grid
+- name: Second run gridSetup.sh - executeConfigTool
+  shell: 
+    cmd: "./gridSetup.sh -silent -executeConfigTools -waitforcompletion -skipStackCheck -responseFile {{stage_dir}}/gridInstallSoft.rsp -all > {{stage_dir}}/giececonfigtools.log" 
+    chdir: "{{ grid_home.oracle_home }}" 
+  args:
+    warn: false 
+  register: _grid_setup_stdout
+  become: true
+  become_user: "{{grid_home.oracle_user}}"  
+  environment:
+      ORACLE_BASE: "{{ grid_home.oracle_base }}"
+      ORACLE_HOME: "{{ grid_home.oracle_home }}"
+  tags: configure_grid 
+  failed_when: false
+- debug: var=_grid_setup_stdout          
+  tags: configure_grid   
