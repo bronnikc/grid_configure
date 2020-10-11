@@ -47,10 +47,12 @@
     - "{{ vote_disk }}"
   loop_control:
     label: '[Provision disk - {{item.disk}} with label {{item.label}}'  
+  register: _init_asm_output
   environment:
       ORACLE_BASE: "/tmp"
       ORACLE_HOME: "{{ grid_home.oracle_home }}"  
-  tags: configure_grid
+  failed_when: _init_asm_output.stdout|default('',true) != ''
+  tags: configure_grid,asmcmd
 
 - name: Copy rspfile
   template: src=grid_install.rsp.j2 dest={{stage_dir}}/gridInstallSoft.rsp mode=660
