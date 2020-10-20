@@ -51,7 +51,7 @@
   environment:
       ORACLE_BASE: "/tmp"
       ORACLE_HOME: "{{ grid_home.oracle_home }}"  
-  failed_when: _init_asm_output.stdout|default('',true) != ''
+  #failed_when: _init_asm_output.stdout|default('',true) != ''
   tags: configure_grid,asmcmd
 
 - name: Copy rspfile
