@@ -7,6 +7,16 @@
   file:
     path: "{{stage_dir}}"
     state: absent
+  with_items:
+    - "{{ nodes }}"
+  loop_control:
+    loop_var: _oracle_nodes
+    label: '[clean stage dir on  {{_oracle_nodes.name}}]'
+  delegate_to: "{{ _oracle_nodes.ip_addr }}"
   become: true
   tags: clean_stage  
-    
+
+
+
+
+ 
